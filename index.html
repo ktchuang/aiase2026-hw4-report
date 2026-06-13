@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HW4 班級分析（匿名統計）</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+ :root{--ink:#1f2933;--muted:#6b7280;--line:#e5e7eb;--bg:#f7f8fa;--card:#fff;--accent:#0e7490}
+ *{box-sizing:border-box}
+ body{font-family:-apple-system,"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.6}
+ .wrap{max-width:1100px;margin:0 auto;padding:28px 22px 80px}
+ h1{font-size:1.6rem;margin:0 0 2px}.sub{color:var(--muted);margin:0 0 16px}
+ .banner{background:#ecfeff;border:1px solid #a5f3fc;color:#155e75;border-radius:10px;padding:8px 14px;font-size:.85rem;margin-bottom:18px}
+ h2{font-size:1.15rem;margin:34px 0 10px;border-bottom:2px solid var(--line);padding-bottom:6px}
+ .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
+ .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+ .kpi .v{font-size:1.6rem;font-weight:700;color:var(--accent)}.kpi .l{font-size:.78rem;color:var(--muted)}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0}
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+ @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+ table{border-collapse:collapse;width:100%;font-size:.88rem}
+ th,td{border:1px solid var(--line);padding:6px 9px;text-align:left}th{background:#f3f4f6}
+ td.r,th.r{text-align:right}
+ canvas{max-height:300px}
+ .note{font-size:.83rem;color:var(--muted);margin-top:6px}
+</style></head><body><div class="wrap">
+<h1>AIASE2026 HW4 — 班級分析（匿名統計）</h1>
+<p class="sub">Pi Memory 自動評分 · 確定性 harness（核心40%）+ 雙模型 LLM（Opus 4.8 + gpt-5.5）· gemini 摘要</p>
+<div class="banner">本報告僅含<b>彙總統計</b>，不含任何學生個人識別資訊。</div>
+<div id="kpis" class="kpis"></div>
+
+<h2>1. 最終分數分佈 & 百分位</h2>
+<div class="grid2">
+ <div class="card"><canvas id="histChart"></canvas><p class="note">校準至 60–95（保序映射，近常態）。0 分（未繳/核心無法評分）不納入。</p></div>
+ <div class="card"><div id="pctTbl"></div><p class="note">有效繳交者的分數百分位。</p></div>
+</div>
+
+<h2>2. 四面向：平均、分佈、客觀 vs LLM</h2>
+<div class="grid2">
+ <div class="card"><canvas id="dimChart"></canvas></div>
+ <div class="card"><canvas id="objllmChart"></canvas><p class="note">B/C/D 拆「客觀（harness）」與「LLM」子分的班平均。</p></div>
+</div>
+<div class="card"><div id="spreadTbl"></div><p class="note">各面向的分佈（min / Q1 / 中位 / Q3 / max），看離散程度。</p></div>
+
+<h2>3. 核心正確性（客觀，pytest）</h2>
+<div class="grid2">
+ <div class="card"><canvas id="aChart"></canvas><p class="note">核心 A 等級分佈。</p></div>
+ <div class="card"><canvas id="groupChart"></canvas><p class="note">各測試群組的全班平均通過率——看哪個 BM25/store 子能力最常出錯。</p></div>
+</div>
+
+<h2>4. 純 BM25 演算法正確性（benchmark 小語料 Recall@5）</h2>
+<div class="card"><canvas id="recallChart"></canvas><p class="note">官方參考值 ≈0.810；落在「≈0.81」者代表實作出標準確定性 BM25。</p></div>
+
+<h2>5. 進階功能（任務二）與 hybrid 成效</h2>
+<div class="grid2">
+ <div class="card"><canvas id="featChart"></canvas><p class="note">偵測到的進階模組（一人可多項）。</p></div>
+ <div class="card"><canvas id="hybChart"></canvas><p class="note">做 hybrid 者於大語料是否實測提升（Recall@5 較粗、MRR 較敏感；「零變化/未重現」多為使用未快取 embedding 模型而 fallback）。</p></div>
+</div>
+
+<h2>6. 反思題涵蓋率（REPORT 七問，gemini 判讀）</h2>
+<div class="card"><canvas id="qChart"></canvas><p class="note">各反思題有觸及的人數佔有效繳交比例。</p></div>
+
+<h2>7. 雙模型一致性（Opus vs gpt-5.5）</h2>
+<div class="card"><canvas id="disChart"></canvas><p class="note">兩模型在 B/C/D 平均分差分佈；≥25 者自動列入助教備註。</p></div>
+
+<h2>8. 完整性與系統備註（計數，無個資）</h2>
+<div class="grid2">
+ <div class="card"><div id="integTbl"></div><p class="note">中性事實計數；評分時 benchmark/測試以官方檔覆蓋，故不影響分數。</p></div>
+ <div class="card"><canvas id="notesChart"></canvas></div>
+</div>
+</div>
+<script>
+const D={"stats": {"n": 561, "nv": 542, "zeros": 19, "mean": 79.0, "median": 79.0, "stdev": 6.9, "min": 60.0, "max": 95.0, "a_mean": 98.4, "hyb_n": 278, "near_ref": 477, "P10": 70.1, "P25": 74.3, "P50": 79.0, "P75": 83.7, "P90": 88.0}, "buckets": [60, 65, 70, 75, 80, 85, 90, 95], "hist": [12, 42, 100, 148, 134, 74, 26, 6], "dims": {"A": 98.4, "B": 87.2, "C": 61.6, "D": 85.1}, "obj_llm": {"B": [91.0, 83.3], "C": [49.0, 74.2], "D": [94.8, 81.8]}, "dim_spread": {"A": [18.6, 100.0, 100.0, 100.0, 100.0], "B": [28.2, 88.5, 94.0, 95.8, 98.2], "C": [0.0, 33.0, 78.0, 82.5, 98.5], "D": [28.8, 82.0, 88.4, 91.4, 96.6]}, "a_dist": [492, 40, 10], "group_mastery": [99.0, 98.6, 99.6, 100.0, 97.5, 94.8], "group_labels": ["BM25 排序", "BM25 數值", "邊界/穩定", "tokenize", "store 持久/去重", "capture/retrieve/inject"], "rb_labels": ["<0.70", "0.70–0.79", "≈0.81 (標準)", "0.82–0.89", "≥0.90"], "rb": [7, 1, 477, 0, 1], "feat": {"hybrid": 278, "privacy": 74, "embed": 25, "decay": 20, "consolidat": 12, "redact": 4, "semantic": 3, "compress": 2, "contradiction": 2, "query_expansion": 2}, "none_feat": 246, "hyb": [82, 84, 169], "hyb_n": 278, "qcov": {"指標不可作弊": 276, "確定/機率分界": 276, "token 預算": 278, "與 /compact": 277, "vs PROGRESS.md": 276, "環境記錄": 272}, "qtotal": 542, "dis_buckets": [242, 195, 79, 20, 5, 1, 0], "notes": {"modified_provided_files": 203, "model_score_variance": 48, "modified_benchmark_data": 6, "bm25_score_differs": 2}, "integrity": {"modified_provided_files": 203, "modified_benchmark_data": 6, "bm25_score_differs": 2, "high_model_variance": 48}}, S=D.stats;
+const C={green:'#16a34a',yellow:'#d97706',red:'#dc2626',blue:'#2563eb',cyan:'#0e7490',slate:'#64748b',violet:'#7c3aed',teal:'#0d9488'};
+const kpis=[['總人數',S.n],['有效繳交',S.nv],['未繳/0分',S.zeros],['平均',S.mean],['中位數',S.median],['標準差',S.stdev],['最高/最低',S.max+' / '+S.min],['核心A平均',S.a_mean],['做hybrid',S.hyb_n],['BM25達標準(≈0.81)',S.near_ref]];
+document.getElementById('kpis').innerHTML=kpis.map(k=>`<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div></div>`).join('');
+new Chart(histChart,{type:'bar',data:{labels:D.buckets.map(b=>b+'–'+(b+4)),datasets:[{data:D.hist,backgroundColor:D.buckets.map(b=>b<70?C.red:b<80?C.yellow:C.green)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'最終分數（每5分）'}},scales:{y:{title:{display:true,text:'人數'}}}}});
+pctTbl.innerHTML='<table><tr><th>百分位</th><th class=r>分數</th></tr>'+['P10','P25','P50','P75','P90'].map(p=>`<tr><td>${p}</td><td class=r>${S[p]}</td></tr>`).join('')+`<tr><td>平均</td><td class=r>${S.mean}</td></tr><tr><td>標準差</td><td class=r>${S.stdev}</td></tr></table>`;
+new Chart(dimChart,{type:'bar',data:{labels:['A 核心','B Bench','C 進階','D 反思'],datasets:[{data:[D.dims.A,D.dims.B,D.dims.C,D.dims.D],backgroundColor:[C.cyan,C.blue,C.violet,C.teal]}]},options:{plugins:{legend:{display:false},title:{display:true,text:'四面向班平均 (0–100)'}},scales:{y:{max:100}}}});
+new Chart(objllmChart,{type:'bar',data:{labels:['B','C','D'],datasets:[{label:'客觀',data:[D.obj_llm.B[0],D.obj_llm.C[0],D.obj_llm.D[0]],backgroundColor:C.cyan},{label:'LLM',data:[D.obj_llm.B[1],D.obj_llm.C[1],D.obj_llm.D[1]],backgroundColor:C.violet}]},options:{plugins:{title:{display:true,text:'客觀 vs LLM 子分'}},scales:{y:{max:100}}}});
+spreadTbl.innerHTML='<table><tr><th>面向</th><th class=r>min</th><th class=r>Q1</th><th class=r>中位</th><th class=r>Q3</th><th class=r>max</th></tr>'+['A','B','C','D'].map(k=>{const s=D.dim_spread[k];return `<tr><td>${k}</td><td class=r>${s[0]}</td><td class=r>${s[1]}</td><td class=r>${s[2]}</td><td class=r>${s[3]}</td><td class=r>${s[4]}</td></tr>`}).join('')+'</table>';
+new Chart(aChart,{type:'doughnut',data:{labels:['A=100 全對','A 80–99','A <80'],datasets:[{data:D.a_dist,backgroundColor:[C.green,C.yellow,C.red]}]},options:{plugins:{title:{display:true,text:'核心 A 等級'}}}});
+new Chart(groupChart,{type:'bar',data:{labels:D.group_labels,datasets:[{data:D.group_mastery,backgroundColor:C.teal}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'各測試群組平均通過率 %'}},scales:{x:{max:100}}}});
+new Chart(recallChart,{type:'bar',data:{labels:D.rb_labels,datasets:[{data:D.rb,backgroundColor:D.rb_labels.map(l=>l.indexOf('標準')>=0?C.green:C.slate)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'純 BM25 Recall@5 分佈（人數）'}}}});
+const fl=Object.keys(D.feat),fv=Object.values(D.feat);
+new Chart(featChart,{type:'bar',data:{labels:[...fl,'(無進階)'],datasets:[{data:[...fv,D.none_feat],backgroundColor:C.teal}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'進階模組採用（人數）'}}}});
+new Chart(hybChart,{type:'doughnut',data:{labels:['Recall 提升','MRR 提升','零變化/未重現'],datasets:[{data:D.hyb,backgroundColor:[C.green,C.blue,C.slate]}]},options:{plugins:{title:{display:true,text:`hybrid 成效 (n=${D.hyb_n})`}}}});
+new Chart(qChart,{type:'bar',data:{labels:Object.keys(D.qcov),datasets:[{data:Object.values(D.qcov),backgroundColor:C.blue}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:`反思題涵蓋人數 (有效n=${D.qtotal})`}},scales:{x:{max:D.qtotal}}}});
+new Chart(disChart,{type:'bar',data:{labels:['0–4','5–9','10–14','15–19','20–24','25–29','≥30'],datasets:[{data:D.dis_buckets,backgroundColor:D.dis_buckets.map((_,i)=>i>=5?C.red:C.blue)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Opus↔gpt-5.5 平均分差'}}}});
+const IL={modified_provided_files:'修改提供檔',modified_benchmark_data:'修改 benchmark 答案',bm25_score_differs:'純BM25宣稱與實測不符',high_model_variance:'雙模型分差大'};
+integTbl.innerHTML='<table><tr><th>項目</th><th class=r>人數</th></tr>'+Object.entries(D.integrity).map(([k,v])=>`<tr><td>${IL[k]||k}</td><td class=r>${v}</td></tr>`).join('')+'</table>';
+new Chart(notesChart,{type:'bar',data:{labels:Object.keys(D.notes),datasets:[{data:Object.values(D.notes),backgroundColor:C.slate}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'系統備註（中性）'}}}});
+</script></body></html>
